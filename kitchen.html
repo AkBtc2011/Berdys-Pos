@@ -1,0 +1,157 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Berdys Kitchen Screen</title>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(
+  "https://lppfbiskcuiopzrjensa.supabase.co",
+  "sb_publishable_iRQW5dIMA5dcXKsoRnF6Qg_oRVQLNyp"
+);
+
+async function loadOrders() {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*")
+    .order("order_number", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    document.getElementById("orders").innerHTML =
+      "<h2>Error loading orders</h2>";
+    return;
+  }
+
+  const activeOrders = data.filter(
+    order => order.status !== "Delivered"
+  );
+
+  if (activeOrders.length === 0) {
+    document.getElementById("orders").innerHTML =
+      "<div class='empty'>No Active Orders</div>";
+    return;
+  }
+
+  let html = "";
+
+  activeOrders.forEach(order => {
+    let itemsHTML = "";
+
+    if (Array.isArray(order.items)) {
+      order.items.forEach(item => {
+        itemsHTML += `
+          <div class="item">
+            • ${item.name} x${item.qty}
+          </div>
+        `;
+      });
+    }
+
+    let statusClass = "new";
+
+    if (order.status === "Preparing") statusClass = "preparing";
+    if (order.status === "Ready") statusClass = "ready";
+
+    html += `
+      <div class="order">
+        <div class="order_number">
+          #${order.id}
+        </div>
+
+        <div class="date">
+          ${order.order_date}
+        </div>
+
+        <div class="items">
+          ${itemsHTML}
+        </div>
+
+        <div class="total">
+          ₹${order.total}
+        </div>
+
+        <div class="status ${statusClass}">
+          ${order.status}
+        </div>
+      </div>
+    `;
+  });
+
+  document.getElementById("orders").innerHTML = html;
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  loadOrders();
+  setInterval(loadOrders, 3000);
+});
+</script>
+
+<style>
+body{
+  margin:0;
+  background:#111;
+  color:white;
+  font-family:Arial,sans-serif;
+}
+
+.header{
+  background:#ff6600;
+  text-align:center;
+  padding:15px;
+  font-size:30px;
+  font-weight:bold;
+}
+
+.orders{
+  padding:20px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(350px,1fr));
+  gap:20px;
+}
+
+.order{
+  background:#222;
+  border-radius:15px;
+  padding:20px;
+}
+
+.order_number{
+  font-size:42px;
+  font-weight:bold;
+  color:#ffd700;
+}
+
+.item{padding:6px 0;}
+.total{margin-top:10px;font-size:24px;font-weight:bold;}
+
+.status{
+  margin-top:10px;
+  padding:10px;
+  text-align:center;
+  border-radius:8px;
+  font-weight:bold;
+}
+
+.new{background:#dc3545;}
+.preparing{background:#ff9800;}
+.ready{background:#28a745;}
+
+.empty{
+  text-align:center;
+  font-size:30px;
+  margin-top:80px;
+}
+</style>
+</head>
+
+<body>
+<div class="header">🍗 BERDYS KITCHEN DISPLAY</div>
+<div id="orders" class="orders"></div>
+</body>
+</html>
+```
