@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Berdys Owner Dashboard</title>
 
+<!--
+  NOTE: Uses a normal <script src="..."> tag for Supabase instead of an
+  ES module "import". Module imports get blocked by CORS when this file
+  is opened by double-clicking (file:// path), which silently kills all
+  JavaScript on the page. A plain script tag does not have this problem,
+  so this file works straight away without hosting or a local server.
+-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <style>
+*{box-sizing:border-box;}
 body{
     margin:0;
     font-family:Arial,sans-serif;
@@ -18,6 +27,21 @@ body{
     color:white;
     text-align:center;
     padding:15px;
+    position:relative;
+}
+.logout-btn{
+    position:absolute;
+    right:15px;
+    top:50%;
+    transform:translateY(-50%);
+    background:#c0392b;
+    color:white;
+    border:none;
+    padding:8px 14px;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:13px;
+    display:none;
 }
 
 .login{
@@ -44,11 +68,31 @@ body{
     background:green;
     color:white;
     cursor:pointer;
+    border-radius:6px;
 }
 
 .dashboard{
     display:none;
     padding:20px;
+    max-width:1100px;
+    margin:0 auto;
+}
+
+.banner{
+    display:none;
+    background:#dc3545;
+    color:white;
+    padding:12px 15px;
+    border-radius:8px;
+    margin-bottom:15px;
+    font-weight:bold;
+}
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:15px;
+    margin-bottom:15px;
 }
 
 .card{
@@ -58,11 +102,69 @@ body{
     margin-bottom:15px;
 }
 
+.section-title{
+    font-size:20px;
+    margin:25px 0 10px;
+}
+
+input[type=text],input[type=number],select{
+    width:100%;
+    padding:10px;
+    margin-top:8px;
+    border:1px solid #ccc;
+    border-radius:6px;
+    box-sizing:border-box;
+}
+
 .order{
     background:white;
     padding:15px;
     border-radius:10px;
     margin-bottom:15px;
+}
+
+.low-stock-tag{
+    color:#dc3545;
+    font-weight:bold;
+    font-size:12px;
+    margin-left:6px;
+}
+
+.btn{
+    border:none;
+    padding:9px 14px;
+    border-radius:6px;
+    cursor:pointer;
+    color:white;
+    font-size:13px;
+}
+.btn-blue{background:#1565c0;}
+.btn-green{background:#28a745;}
+.btn-update{width:100%;margin-top:8px;}
+
+#billPreview{
+    background:white;
+    padding:15px;
+    margin-top:15px;
+    border:2px dashed #444;
+    border-radius:8px;
+    display:none;
+}
+#billPreview table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:10px;
+}
+#billPreview th,#billPreview td{
+    border:1px solid #ccc;
+    padding:8px;
+    text-align:left;
+}
+
+.inv-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:12px;
 }
 </style>
 </head>
@@ -70,111 +172,190 @@ body{
 
 <div class="header">
     <h1>🍗 Berdys Owner Dashboard</h1>
+    <button class="logout-btn" id="logoutBtn">Logout</button>
 </div>
 
 <div class="login" id="loginBox">
     <h2>Owner Login</h2>
     <input type="password" id="password" placeholder="Enter Password">
-    <button onclick="login()">Login</button>
+    <button id="loginBtn">Login</button>
 </div>
 
 <div class="dashboard" id="dashboard">
-    <div class="card">
-        <h2>Total Orders: <span id="totalOrders">0</span></h2>
-        <h2>Total Sales: ₹<span id="totalSales">0</span></h2>
+
+    <!-- LOW STOCK BANNER -->
+    <div class="banner" id="lowStockBanner"></div>
+
+    <!-- STATS OVERVIEW -->
+    <div class="stats">
+        <div class="card"><h3>Total Orders</h3><h1 id="totalOrders">0</h1></div>
+        <div class="card"><h3>Total Sales</h3><h1>₹<span id="totalSales">0</span></h1></div>
+        <div class="card"><h3>Today's Sales</h3><h1>₹<span id="todaySales">0</span></h1></div>
+        <div class="card"><h3>Best Seller</h3><h1 id="bestSeller">-</h1></div>
+        <div class="card"><h3>Low Stock Items</h3><h1 id="lowStockCount">0</h1></div>
+        <div class="card"><h3>Paid Orders</h3><h1 id="paidOrders">0</h1></div>
+        <div class="card"><h3>Unpaid Orders</h3><h1 id="unpaidOrders">0</h1></div>
+        <div class="card"><h3>Cash Sales</h3><h1>₹<span id="cashSales">0</span></h1></div>
+        <div class="card"><h3>UPI Sales</h3><h1>₹<span id="upiSales">0</span></h1></div>
+        <div class="card"><h3>Card Sales</h3><h1>₹<span id="cardSales">0</span></h1></div>
     </div>
 
-    <div id="orders"></div>
+    <!-- GST BILL LOOKUP -->
+    <div class="card">
+        <h2>🧾 GST Bill Lookup</h2>
+        <input type="text" id="billOrderNo" placeholder="Enter Order Number">
+        <button class="btn btn-blue btn-update" onclick="generateBill()">View / Print Bill</button>
+        <div id="billPreview"></div>
+    </div>
+
+    <!-- ALL ORDERS -->
+    <h2 class="section-title">📋 All Orders</h2>
+    <input type="text" id="searchOrder" placeholder="Search by customer name" onkeyup="loadOrders()">
+    <div id="orders" style="margin-top:15px;"></div>
+
+    <!-- INVENTORY -->
+    <h2 class="section-title">📦 Inventory</h2>
+    <div class="card">
+        <div class="inv-grid" id="inventory"></div>
+    </div>
+
 </div>
 
-<script type="module">
+<script>
+// Normal script (not type="module") — see note in <head> for why.
 
-import { createClient }
-from 'https://esm.sh/@supabase/supabase-js@2';
+const OWNER_PASSWORD = "@BRG";
+const LOW_STOCK_THRESHOLD = 10;
 
-const OWNER_PASSWORD = "1234";
-
-const supabase = createClient(
+const supabase_client = supabase.createClient(
     "https://lppfbiskcuiopzrjensa.supabase.co",
     "sb_publishable_iRQW5dIMA5dcXKsoRnF6Qg_oRVQLNyp"
 );
 
-window.login = async function(){
+let intervalIds = [];
+let intervalsStarted = false;
 
-    const pass =
-    document.getElementById("password").value;
+document.getElementById("loginBtn").addEventListener("click", login);
+document.getElementById("password").addEventListener("keyup", (e) => {
+    if (e.key === "Enter") login();
+});
+document.getElementById("logoutBtn").addEventListener("click", logout);
 
-    if(pass !== OWNER_PASSWORD){
+async function login(){
+
+    const pass = document.getElementById("password").value;
+
+    if (pass !== OWNER_PASSWORD) {
         alert("Wrong Password");
         return;
     }
 
-    document.getElementById("loginBox").style.display="none";
-    document.getElementById("dashboard").style.display="block";
+    document.getElementById("loginBox").style.display = "none";
+    document.getElementById("dashboard").style.display = "block";
+    document.getElementById("logoutBtn").style.display = "inline-block";
 
-    await loadOrders();
+    startApp();
+}
 
-    setInterval(loadOrders,5000);
+function logout(){
+    intervalIds.forEach(id => clearInterval(id));
+    intervalIds = [];
+    intervalsStarted = false;
+
+    document.getElementById("dashboard").style.display = "none";
+    document.getElementById("logoutBtn").style.display = "none";
+    document.getElementById("loginBox").style.display = "block";
+    document.getElementById("password").value = "";
+}
+
+function startApp(){
+    loadOrders();
+    loadInventory();
+
+    if (!intervalsStarted) {
+        intervalsStarted = true;
+        intervalIds.push(setInterval(loadOrders, 5000));
+        intervalIds.push(setInterval(loadInventory, 10000));
+    }
 }
 
 async function loadOrders(){
 
+    const search = document.getElementById("searchOrder")?.value?.toLowerCase() || "";
+
     const { data, error } =
-    await supabase
+    await supabase_client
     .from("orders")
     .select("*")
-    .order("order_number",{ascending:false});
+    .order("order_number", { ascending: false });
 
-    if(error){
+    if (error) {
         console.error(error);
         return;
     }
-    window.updatePayment = async function(id,status){
 
-    const { error } =
-    await supabase
-    .from("orders")
-    .update({
-        payment_status: status
-    })
-    .eq("id", id);
+    // --- STATS ---
+    document.getElementById("totalOrders").textContent = data.length;
 
-    if(error){
-        console.error(error);
-        alert(error.message);
-    }
-}
+    let sales = 0, paid = 0, unpaid = 0;
+    let cash = 0, upi = 0, card = 0;
+    let todaySales = 0;
+    let itemCount = {};
+    const today = new Date().toLocaleDateString();
 
-    document.getElementById("totalOrders").textContent =
-    data.length;
+    data.forEach(order => {
+        const total = Number(order.total || 0);
+        sales += total;
 
-    let sales = 0;
+        if (order.payment_status === "Paid") paid++; else unpaid++;
 
-    data.forEach(order=>{
-        sales += Number(order.total || 0);
+        const method = order.payment_method || "Cash";
+        if (method === "Cash") cash += total;
+        else if (method === "UPI") upi += total;
+        else if (method === "Card") card += total;
+
+        if (String(order.order_date).includes(today)) {
+            todaySales += total;
+        }
+
+        if (Array.isArray(order.items)) {
+            order.items.forEach(item => {
+                if (!itemCount[item.name]) itemCount[item.name] = 0;
+                itemCount[item.name] += Number(item.qty || 0);
+            });
+        }
     });
 
-    document.getElementById("totalSales").textContent =
-    sales;
+    let bestSeller = "-", bestQty = 0;
+    for (const item in itemCount) {
+        if (itemCount[item] > bestQty) { bestQty = itemCount[item]; bestSeller = item; }
+    }
 
+    document.getElementById("totalSales").textContent = sales.toFixed(2);
+    document.getElementById("todaySales").textContent = todaySales.toFixed(2);
+    document.getElementById("bestSeller").textContent = bestSeller;
+    document.getElementById("paidOrders").textContent = paid;
+    document.getElementById("unpaidOrders").textContent = unpaid;
+    document.getElementById("cashSales").textContent = cash.toFixed(2);
+    document.getElementById("upiSales").textContent = upi.toFixed(2);
+    document.getElementById("cardSales").textContent = card.toFixed(2);
+
+    // --- ORDER LIST ---
     let html = "";
 
-    data.forEach(order=>{
+    data.forEach(order => {
+
+        if (search && !String(order.customer_name || "").toLowerCase().includes(search)) return;
 
         let itemsHTML = "";
 
-        if(Array.isArray(order.items)){
-
-            order.items.forEach(item=>{
-
-                itemsHTML += `
-                <li>
-                ${item.name} x${item.qty}
-                </li>`;
+        if (Array.isArray(order.items)) {
+            order.items.forEach(item => {
+                itemsHTML += `<li>${item.name} x${item.qty}</li>`;
             });
         }
 
-       html += `
+        html += `
 <div class="order">
 
     <h3>Order #${order.order_number}</h3>
@@ -185,22 +366,23 @@ async function loadOrders(){
 
     <p><b>Table:</b> ${order.table_number || "N/A"}</p>
 
+    <p><b>Method:</b> ${order.payment_method || "Cash"}</p>
+
+    <p>
+    <b>Order Status:</b>
+    <select onchange="updateStatus(${order.id},this.value)">
+        <option value="New" ${order.status==="New"?"selected":""}>New</option>
+        <option value="Preparing" ${order.status==="Preparing"?"selected":""}>Preparing</option>
+        <option value="Ready" ${order.status==="Ready"?"selected":""}>Ready</option>
+        <option value="Delivered" ${order.status==="Delivered"?"selected":""}>Delivered</option>
+    </select>
+    </p>
+
     <p>
     <b>Payment:</b>
-
-    <select
-    onchange="updatePayment(${order.id},this.value)">
-
-        <option
-        ${order.payment_status==="Unpaid"?"selected":""}>
-        Unpaid
-        </option>
-
-        <option
-        ${order.payment_status==="Paid"?"selected":""}>
-        Paid
-        </option>
-
+    <select onchange="updatePayment(${order.id},this.value)">
+        <option value="Unpaid" ${order.payment_status==="Unpaid"?"selected":""}>Unpaid</option>
+        <option value="Paid" ${order.payment_status==="Paid"?"selected":""}>Paid</option>
     </select>
     </p>
 
@@ -210,17 +392,166 @@ async function loadOrders(){
 
     <h4>Total ₹${order.total}</h4>
 
-    <p><b>Status:</b> ${order.status}</p>
+    <button class="btn btn-green" onclick="generateBillFor(${order.order_number})">View / Print Bill</button>
 
 </div>`;
     });
 
-    document.getElementById("orders").innerHTML =
-    html;
+    document.getElementById("orders").innerHTML = html;
+
+    // --- LOW STOCK (uses inventory, fetched separately below) ---
+    checkLowStock();
 }
 
+async function updateStatus(id, status){
+    const { error } = await supabase_client
+        .from("orders")
+        .update({ status: status })
+        .eq("id", id);
+
+    if (error) { console.error(error); alert(error.message); }
+    loadOrders();
+}
+
+async function updatePayment(id, status){
+    const { error } = await supabase_client
+        .from("orders")
+        .update({ payment_status: status })
+        .eq("id", id);
+
+    if (error) { console.error(error); alert(error.message); }
+    loadOrders();
+}
+
+async function loadInventory(){
+
+    const { data, error } = await supabase_client
+        .from("inventory")
+        .select("*")
+        .order("item_name");
+
+    if (error) { console.error(error); return; }
+
+    let html = "";
+
+    data.forEach(item => {
+        const low = Number(item.stock) <= LOW_STOCK_THRESHOLD;
+
+        html += `
+        <div class="card" style="margin-bottom:0;">
+            <h4>${item.item_name} ${low ? '<span class="low-stock-tag">LOW STOCK</span>' : ''}</h4>
+            <input type="number" id="stock_${item.id}" value="${item.stock}">
+            <p style="margin:6px 0;">Unit: ${item.unit}</p>
+            <button class="btn btn-blue btn-update" onclick="saveStock(${item.id})">Update Stock</button>
+        </div>`;
+    });
+
+    document.getElementById("inventory").innerHTML = html;
+
+    checkLowStock();
+}
+
+async function saveStock(id){
+    const stock = document.getElementById("stock_" + id).value;
+
+    const { error } = await supabase_client
+        .from("inventory")
+        .update({ stock: Number(stock) })
+        .eq("id", id);
+
+    if (error) { console.error(error); alert(error.message); return; }
+
+    alert("Inventory Updated");
+    loadInventory();
+}
+
+async function checkLowStock(){
+    const { data, error } = await supabase_client.from("inventory").select("*");
+    if (error) { console.error(error); return; }
+
+    const lowItems = data
+        .filter(item => Number(item.stock) <= LOW_STOCK_THRESHOLD)
+        .map(item => item.item_name);
+
+    document.getElementById("lowStockCount").textContent = lowItems.length;
+
+    const banner = document.getElementById("lowStockBanner");
+    if (lowItems.length === 0) {
+        banner.style.display = "none";
+    } else {
+        banner.style.display = "block";
+        banner.textContent = "⚠️ Low Stock Alert: " + lowItems.join(", ");
+    }
+}
+
+async function generateBillFor(orderNumber){
+    const { data, error } = await supabase_client
+        .from("orders")
+        .select("*")
+        .eq("order_number", orderNumber)
+        .limit(1);
+
+    if (error || !data || data.length === 0) {
+        alert("Order Not Found");
+        return;
+    }
+
+    renderBill(data[0]);
+}
+
+function generateBill(){
+    const orderNo = document.getElementById("billOrderNo").value;
+    if (!orderNo) { alert("Enter Order Number"); return; }
+    generateBillFor(orderNo);
+}
+
+function renderBill(order){
+    let itemsHTML = "";
+    let subtotal = 0;
+
+    if (Array.isArray(order.items)) {
+        order.items.forEach(item => {
+            const itemTotal = item.price * item.qty;
+            subtotal += itemTotal;
+            itemsHTML += `<tr><td>${item.name}</td><td>${item.qty}</td><td>₹${item.price}</td><td>₹${itemTotal}</td></tr>`;
+        });
+    }
+
+    const gst = subtotal * 0.05;
+    const grandTotal = subtotal + gst;
+
+    const box = document.getElementById("billPreview");
+    box.style.display = "block";
+    box.innerHTML = `
+        <h2>🍗 BERDYS CHICKEN</h2>
+        <p>Order: #${order.order_number}</p>
+        <p>Customer: ${order.customer_name}</p>
+        <p>Table: ${order.table_number}</p>
+        <p>Date: ${order.order_date}</p>
+        <table>
+            <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr>
+            ${itemsHTML}
+        </table>
+        <h3>Subtotal: ₹${subtotal.toFixed(2)}</h3>
+        <h3>GST 5%: ₹${gst.toFixed(2)}</h3>
+        <h2>Grand Total: ₹${grandTotal.toFixed(2)}</h2>
+        <p>Payment Status: ${order.payment_status}</p>
+        <p>Payment Method: ${order.payment_method || "Cash"}</p>
+        <p>Order Status: ${order.status}</p>
+        <button class="btn btn-green" onclick="printBill()">Print Bill</button>
+    `;
+
+    box.scrollIntoView({ behavior: "smooth" });
+}
+
+function printBill(){
+    const content = document.getElementById("billPreview").innerHTML;
+    const w = window.open("", "", "width=800,height=600");
+    w.document.write(`<html><head><title>Bill</title></head><body>${content}</body></html>`);
+    w.document.close();
+    w.print();
+}
 </script>
 
 </body>
 </html>
-
