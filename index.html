@@ -5,7 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Berdys Ordering</title>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!--
+  NOTE: This uses a normal <script src="..."> tag for Supabase instead of
+  an ES module "import". Regular script tags work when this file is opened
+  directly by double-clicking (file:// path); ES module imports get
+  blocked by the browser's CORS rules on file:// and silently kill all
+  the JavaScript on the page. This is why the button logic below will
+  actually run without needing a local server or hosting.
+-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <style>
 body{
@@ -40,18 +48,91 @@ button{
 .add{
     background:green;
     color:white;
+    width:100%;
 }
 .place{
     width:100%;
     background:#ff6600;
     color:white;
     margin-top:10px;
+    font-size:16px;
+}
+.place:disabled{
+    background:#aaa;
+    cursor:not-allowed;
 }
 .cart{
     background:white;
     margin:15px;
     padding:15px;
     border-radius:10px;
+}
+.cart-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+}
+.qty-controls{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+.qty-controls button{
+    width:26px;
+    height:26px;
+    padding:0;
+    background:#1565c0;
+    color:white;
+    font-size:15px;
+}
+.totals-row{
+    display:flex;
+    justify-content:space-between;
+    padding:4px 0;
+}
+.bill-box{
+    background:white;
+    margin:15px;
+    padding:15px;
+    border-radius:10px;
+    border:2px dashed #444;
+    display:none;
+}
+.bill-box.show{
+    display:block;
+}
+.bill-box table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:10px;
+}
+.bill-box th, .bill-box td{
+    border:1px solid #ccc;
+    padding:8px;
+    text-align:left;
+}
+.bill-actions{
+    display:flex;
+    gap:10px;
+    margin-top:15px;
+}
+.bill-actions button{
+    flex:1;
+}
+.download-btn{
+    background:#1565c0;
+    color:white;
+}
+.print-btn{
+    background:#28a745;
+    color:white;
+}
+.new-order-btn{
+    background:#666;
+    color:white;
+    width:100%;
+    margin-top:10px;
 }
 </style>
 </head>
@@ -60,6 +141,9 @@ button{
 <div class="header">
 <h1>🍗 Berdys Chicken</h1>
 </div>
+
+<!-- ORDER SECTION -->
+<div id="orderSection">
 
 <div class="products">
 
@@ -91,15 +175,16 @@ button{
 
 <div class="cart">
 <h2 id="orderno">Order #Loading...</h2>
+
 <input
 id="customerName"
 type="text"
 placeholder="Enter Your Name"
-style="width:100%;padding:10px;margin-bottom:10px;">
+style="width:100%;padding:10px;margin-bottom:10px;box-sizing:border-box;">
 
 <select
 id="tableNumber"
-style="width:100%;padding:10px;margin-bottom:10px;">
+style="width:100%;padding:10px;margin-bottom:10px;box-sizing:border-box;">
 
 <option value="">Select Table</option>
 <option value="1">Table 1</option>
@@ -109,32 +194,80 @@ style="width:100%;padding:10px;margin-bottom:10px;">
 <option value="5">Table 5</option>
 
 </select>
-<div id="cartItems"></div>
 
-<h3>Total ₹<span id="total">0</span></h3>
+<select
+id="paymentMethod"
+style="width:100%;padding:10px;margin-bottom:10px;box-sizing:border-box;">
 
-<button class="place" onclick="placeOrder()">
+<option value="Cash">Pay with Cash</option>
+<option value="UPI">Pay with UPI</option>
+<option value="Card">Pay with Card</option>
+
+</select>
+
+<div id="cartItems"><p style="color:#888;">Cart is empty</p></div>
+
+<div class="totals-row"><span>Subtotal</span><span>₹<span id="subtotal">0</span></span></div>
+<div class="totals-row"><span>GST 5%</span><span>₹<span id="gst">0</span></span></div>
+<div class="totals-row" style="font-weight:bold;font-size:18px;"><span>Total</span><span>₹<span id="total">0</span></span></div>
+
+<button class="place" id="placeBtn" onclick="placeOrder()">
 Place Order
 </button>
 </div>
-<script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const supabase = createClient(
+</div>
+
+<!-- BILL SECTION (shown after placing order) -->
+<div class="bill-box" id="billBox">
+  <h2>🍗 BERDYS CHICKEN - Bill</h2>
+  <p id="billOrderNo">Order #-</p>
+  <p id="billCustomer">Customer: -</p>
+  <p id="billTable">Table: -</p>
+  <p id="billDate">Date: -</p>
+
+  <table>
+    <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr>
+    <tbody id="billItemsBody"></tbody>
+  </table>
+
+  <div class="totals-row"><span>Subtotal</span><span>₹<span id="billSubtotal">0</span></span></div>
+  <div class="totals-row"><span>GST 5%</span><span>₹<span id="billGst">0</span></span></div>
+  <div class="totals-row" style="font-weight:bold;font-size:18px;"><span>Grand Total</span><span>₹<span id="billGrandTotal">0</span></span></div>
+
+  <p style="font-size:13px;color:#666;">Payment Method: <b id="billPaymentMethod">-</b> (pay at the counter)</p>
+
+  <div class="bill-actions">
+    <button class="print-btn" onclick="printBill()">Print Bill</button>
+    <button class="download-btn" onclick="downloadBill()">Download Bill</button>
+  </div>
+
+  <button class="new-order-btn" onclick="startNewOrder()">Place Another Order</button>
+</div>
+
+<script>
+// Normal script (not type="module") — see note in <head> for why.
+
+const supabase_client = supabase.createClient(
   "https://lppfbiskcuiopzrjensa.supabase.co",
   "sb_publishable_iRQW5dIMA5dcXKsoRnF6Qg_oRVQLNyp"
 );
 
 let cart = [];
-let currentOrderNo = 101;
+let currentOrderNo = 1;
+let lastBillData = null; // stores the most recently generated bill, used by download/print
 
 async function loadOrderNumber() {
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase_client
         .from("orders")
         .select("order_number")
         .order("order_number", { ascending: false })
         .limit(1);
+
+    if (error) {
+        console.error("Could not load last order number from Supabase:", error);
+    }
 
     if (!error && data.length > 0) {
         currentOrderNo = Number(data[0].order_number) + 1;
@@ -144,7 +277,7 @@ async function loadOrderNumber() {
         "Order #" + currentOrderNo;
 }
 
-window.addItem = function(name, price) {
+function addItem(name, price) {
 
     const existing = cart.find(x => x.name === name);
 
@@ -159,35 +292,137 @@ window.addItem = function(name, price) {
     }
 
     renderCart();
-};
+}
+
+function changeQty(name, delta) {
+    const item = cart.find(x => x.name === name);
+    if (!item) return;
+
+    item.qty += delta;
+    if (item.qty <= 0) {
+        cart = cart.filter(x => x.name !== name);
+    }
+
+    renderCart();
+}
 
 function renderCart() {
 
-    let html = "";
-    let total = 0;
+    const cartDiv = document.getElementById("cartItems");
 
-    cart.forEach(item => {
+    if (cart.length === 0) {
+        cartDiv.innerHTML = '<p style="color:#888;">Cart is empty</p>';
+    } else {
+        let html = "";
 
-        total += item.price * item.qty;
+        cart.forEach(item => {
+            const rowTotal = item.price * item.qty;
 
-        html += `
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-            <span>${item.name} x${item.qty}</span>
-            <span>₹${item.price * item.qty}</span>
-        </div>`;
-    });
+            html += `
+            <div class="cart-row">
+                <span>${item.name}</span>
+                <div class="qty-controls">
+                    <button onclick="changeQty('${item.name}',-1)">−</button>
+                    <span>${item.qty}</span>
+                    <button onclick="changeQty('${item.name}',1)">+</button>
+                    <span style="min-width:55px;text-align:right;">₹${rowTotal}</span>
+                </div>
+            </div>`;
+        });
 
-    document.getElementById("cartItems").innerHTML = html;
-    document.getElementById("total").innerText = total;
+        cartDiv.innerHTML = html;
+    }
+
+    let subtotal = 0;
+    cart.forEach(item => subtotal += item.price * item.qty);
+    const gst = subtotal * 0.05;
+    const total = subtotal + gst;
+
+    document.getElementById("subtotal").innerText = subtotal.toFixed(2);
+    document.getElementById("gst").innerText = gst.toFixed(2);
+    document.getElementById("total").innerText = total.toFixed(2);
 }
 
-window.placeOrder = async function() {
+// Looks up the "recipes" table for the items in this cart and returns a
+// map of { inventory_item_name: total_qty_needed }. Menu items with no
+// recipe rows are simply left out (nothing to check/deduct for them).
+async function getDeductionsForCart(cartItems) {
+    const menuItemNames = cartItems.map(item => item.name);
+
+    const { data: recipeRows, error } = await supabase_client
+        .from("recipes")
+        .select("*")
+        .in("menu_item", menuItemNames);
+
+    if (error) {
+        console.error("Could not load recipes:", error);
+        return {}; // fail open — don't block orders just because recipes failed to load
+    }
+
+    const deductions = {};
+    if (!recipeRows) return deductions;
+
+    cartItems.forEach(cartItem => {
+        recipeRows
+            .filter(r => r.menu_item === cartItem.name)
+            .forEach(r => {
+                const needed = Number(r.qty_per_unit) * cartItem.qty;
+                deductions[r.inventory_item] = (deductions[r.inventory_item] || 0) + needed;
+            });
+    });
+
+    return deductions;
+}
+
+// Checks current inventory stock against what's needed. Returns
+// { ok, shortages, invRows } — ok is false if any item doesn't have enough.
+async function checkStock(deductions) {
+    const names = Object.keys(deductions);
+    if (names.length === 0) return { ok: true, shortages: [], invRows: [] };
+
+    const { data: invRows, error } = await supabase_client
+        .from("inventory")
+        .select("*")
+        .in("item_name", names);
+
+    if (error) {
+        console.error("Could not check inventory:", error);
+        return { ok: true, shortages: [], invRows: [] }; // fail open
+    }
+
+    const shortages = [];
+    invRows.forEach(inv => {
+        const needed = deductions[inv.item_name] || 0;
+        if (Number(inv.stock) < needed) {
+            shortages.push({ item: inv.item_name, needed, available: Number(inv.stock) });
+        }
+    });
+
+    return { ok: shortages.length === 0, shortages, invRows };
+}
+
+// Actually subtracts stock, using the inventory rows already fetched
+// during checkStock (avoids a second redundant fetch).
+async function applyDeductions(deductions, invRows) {
+    for (const inv of invRows) {
+        const used = deductions[inv.item_name] || 0;
+        if (used === 0) continue;
+        const newStock = Number(inv.stock) - used;
+
+        await supabase_client.from("inventory").update({ stock: newStock }).eq("id", inv.id);
+    }
+}
+
+async function placeOrder() {
 
     const customerName =
     document.getElementById("customerName").value.trim();
 
     const tableNumber =
     document.getElementById("tableNumber").value;
+
+    const paymentMethod =
+    document.getElementById("paymentMethod").value;
 
     if (!customerName) {
         alert("Please Enter Your Name");
@@ -204,24 +439,53 @@ window.placeOrder = async function() {
         return;
     }
 
-    let total = 0;
+    const placeBtn = document.getElementById("placeBtn");
+    placeBtn.disabled = true;
+    placeBtn.innerText = "Placing Order...";
 
+    // STOCK CHECK — figure out what this order needs, and block
+    // placement if there isn't enough stock for any ingredient.
+    const deductions = await getDeductionsForCart(cart);
+    const stockCheck = await checkStock(deductions);
+
+    if (!stockCheck.ok) {
+        let msg = "Sorry, we're out of stock on:\n\n";
+        stockCheck.shortages.forEach(s => {
+            msg += `${s.item} (need ${s.needed}, only ${s.available} left)\n`;
+        });
+        alert(msg);
+
+        placeBtn.disabled = false;
+        placeBtn.innerText = "Place Order";
+        return;
+    }
+
+    let subtotal = 0;
     cart.forEach(item => {
-        total += item.price * item.qty;
+        subtotal += item.price * item.qty;
     });
+    const gst = subtotal * 0.05;
+    const total = subtotal + gst;
+    const orderDate = new Date().toLocaleString();
+    const orderNumber = currentOrderNo;
+    const orderedItems = cart.slice(); // snapshot before we clear the cart
 
-    const { error } = await supabase
+    const { error } = await supabase_client
         .from("orders")
         .insert([{
-            order_number: currentOrderNo,
-            order_date: new Date().toLocaleString(),
+            order_number: orderNumber,
+            order_date: orderDate,
             customer_name: customerName,
             table_number: tableNumber,
             payment_status: "Unpaid",
-            items: cart,
+            payment_method: paymentMethod,
+            items: orderedItems,
             total: total,
             status: "New"
         }]);
+
+    placeBtn.disabled = false;
+    placeBtn.innerText = "Place Order";
 
     if (error) {
         console.error(error);
@@ -229,24 +493,116 @@ window.placeOrder = async function() {
         return;
     }
 
-    alert(
-        "Order #" +
-        currentOrderNo +
-        " Placed Successfully"
-    );
+    // AUTO INVENTORY DEDUCTION — now that the order is confirmed saved.
+    await applyDeductions(deductions, stockCheck.invRows);
+
+    // Build and show the bill using the data we already have
+    showBill({
+        order_number: orderNumber,
+        customer_name: customerName,
+        table_number: tableNumber,
+        order_date: orderDate,
+        payment_method: paymentMethod,
+        items: orderedItems,
+        subtotal: subtotal,
+        gst: gst,
+        total: total
+    });
 
     cart = [];
-
     renderCart();
 
     document.getElementById("customerName").value = "";
     document.getElementById("tableNumber").value = "";
+    document.getElementById("paymentMethod").value = "Cash";
 
     currentOrderNo++;
 
     document.getElementById("orderno").innerText =
         "Order #" + currentOrderNo;
-};
+}
+
+function showBill(bill) {
+    lastBillData = bill;
+
+    let rowsHTML = "";
+    bill.items.forEach(item => {
+        const rowTotal = item.price * item.qty;
+        rowsHTML += `<tr><td>${item.name}</td><td>${item.qty}</td><td>₹${item.price}</td><td>₹${rowTotal}</td></tr>`;
+    });
+
+    document.getElementById("billOrderNo").innerText = "Order #" + bill.order_number;
+    document.getElementById("billCustomer").innerText = "Customer: " + bill.customer_name;
+    document.getElementById("billTable").innerText = "Table: " + bill.table_number;
+    document.getElementById("billDate").innerText = "Date: " + bill.order_date;
+    document.getElementById("billItemsBody").innerHTML = rowsHTML;
+    document.getElementById("billSubtotal").innerText = bill.subtotal.toFixed(2);
+    document.getElementById("billGst").innerText = bill.gst.toFixed(2);
+    document.getElementById("billGrandTotal").innerText = bill.total.toFixed(2);
+    document.getElementById("billPaymentMethod").innerText = bill.payment_method;
+
+    document.getElementById("orderSection").style.display = "none";
+    document.getElementById("billBox").classList.add("show");
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function billAsText(bill) {
+    let text = "";
+    text += "BERDYS CHICKEN\n";
+    text += "=====================\n";
+    text += "Order #" + bill.order_number + "\n";
+    text += "Customer: " + bill.customer_name + "\n";
+    text += "Table: " + bill.table_number + "\n";
+    text += "Date: " + bill.order_date + "\n";
+    text += "---------------------\n";
+
+    bill.items.forEach(item => {
+        const rowTotal = item.price * item.qty;
+        text += item.name + " x" + item.qty + " = ₹" + rowTotal + "\n";
+    });
+
+    text += "---------------------\n";
+    text += "Subtotal: ₹" + bill.subtotal.toFixed(2) + "\n";
+    text += "GST 5%: ₹" + bill.gst.toFixed(2) + "\n";
+    text += "Grand Total: ₹" + bill.total.toFixed(2) + "\n";
+    text += "=====================\n";
+    text += "Payment Method: " + bill.payment_method + "\n";
+    text += "Pay at the counter.\n";
+
+    return text;
+}
+
+function downloadBill() {
+    if (!lastBillData) return;
+
+    const text = billAsText(lastBillData);
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Berdys_Order_" + lastBillData.order_number + ".txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+}
+
+function printBill() {
+    const content = document.getElementById("billBox").innerHTML;
+    const w = window.open("", "", "width=800,height=600");
+    w.document.write(`<html><head><title>Bill</title></head><body>${content}</body></html>`);
+    w.document.close();
+    w.print();
+}
+
+function startNewOrder() {
+    document.getElementById("billBox").classList.remove("show");
+    document.getElementById("orderSection").style.display = "block";
+    lastBillData = null;
+}
 
 loadOrderNumber();
 </script>
