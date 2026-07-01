@@ -129,6 +129,21 @@ async function loadOrders(){
         console.error(error);
         return;
     }
+    window.updatePayment = async function(id,status){
+
+    const { error } =
+    await supabase
+    .from("orders")
+    .update({
+        payment_status: status
+    })
+    .eq("id", id);
+
+    if(error){
+        console.error(error);
+        alert(error.message);
+    }
+}
 
     document.getElementById("totalOrders").textContent =
     data.length;
@@ -159,22 +174,45 @@ async function loadOrders(){
             });
         }
 
-        html += `
-        <div class="order">
+       html += `
+<div class="order">
 
-            <h3>Order #${order.id}</h3>
+    <h3>Order #${order.order_number}</h3>
 
-            <p>${order.order_date}</p>
+    <p><b>Date:</b> ${order.order_date}</p>
 
-            <ul>
-                ${itemsHTML}
-            </ul>
+    <p><b>Customer:</b> ${order.customer_name || "N/A"}</p>
 
-            <h4>Total ₹${order.total}</h4>
+    <p><b>Table:</b> ${order.table_number || "N/A"}</p>
 
-            <p>Status: ${order.status}</p>
+    <p>
+    <b>Payment:</b>
 
-        </div>`;
+    <select
+    onchange="updatePayment(${order.id},this.value)">
+
+        <option
+        ${order.payment_status==="Unpaid"?"selected":""}>
+        Unpaid
+        </option>
+
+        <option
+        ${order.payment_status==="Paid"?"selected":""}>
+        Paid
+        </option>
+
+    </select>
+    </p>
+
+    <ul>
+        ${itemsHTML}
+    </ul>
+
+    <h4>Total ₹${order.total}</h4>
+
+    <p><b>Status:</b> ${order.status}</p>
+
+</div>`;
     });
 
     document.getElementById("orders").innerHTML =
@@ -185,4 +223,4 @@ async function loadOrders(){
 
 </body>
 </html>
-```
+
