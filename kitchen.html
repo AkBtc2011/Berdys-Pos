@@ -1,175 +1,363 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Berdys Kitchen Screen</title>
+<title>Berdys Kitchen Display</title>
 
-<script type="module">
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const supabase = createClient(
-  "https://lppfbiskcuiopzrjensa.supabase.co",
-  "sb_publishable_iRQW5dIMA5dcXKsoRnF6Qg_oRVQLNyp"
-);
-
-async function loadOrders() {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("*")
-    .order("order_number", { ascending: false });
-
-  if (error) {
-    console.error(error);
-    document.getElementById("orders").innerHTML =
-      "<h2>Error loading orders</h2>";
-    return;
-  }
-
-  const activeOrders = data.filter(
-    order => order.status !== "Delivered"
-  );
-
-  if (activeOrders.length === 0) {
-    document.getElementById("orders").innerHTML =
-      "<div class='empty'>No Active Orders</div>";
-    return;
-  }
-
-  let html = "";
-
-  activeOrders.forEach(order => {
-    let itemsHTML = "";
-
-    if (Array.isArray(order.items)) {
-      order.items.forEach(item => {
-        itemsHTML += `
-          <div class="item">
-            • ${item.name} x${item.qty}
-          </div>
-        `;
-      });
-    }
-
-    let statusClass = "new";
-
-    if (order.status === "Preparing") statusClass = "preparing";
-    if (order.status === "Ready") statusClass = "ready";
-
-   html += `
-<div class="order">
-
-    <div class="order_number">
-    #${order.order_number}
-    </div>
-
-    <div class="date">
-    ${order.order_date}
-    </div>
-
-    <div style="margin-top:10px;font-size:20px;">
-    👤 ${order.customer_name || "N/A"}
-    </div>
-
-    <div style="margin-top:5px;font-size:20px;">
-    🪑 Table ${order.table_number || "-"}
-    </div>
-
-    <div style="
-    margin-top:10px;
-    font-size:18px;
-    font-weight:bold;
-    color:${order.payment_status==="Paid"?"#00ff66":"#ff4444"};
-    ">
-    ${order.payment_status==="Paid" ? "🟢 Paid" : "🔴 Unpaid"}
-    </div>
-
-    <div class="items">
-    ${itemsHTML}
-    </div>
-
-    <div class="total">
-    ₹${order.total}
-    </div>
-
-    <div class="status ${statusClass}">
-    ${order.status}
-    </div>
-
-</div>`;
-  });
-
-  document.getElementById("orders").innerHTML = html;
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-  loadOrders();
-  setInterval(loadOrders, 3000);
-});
-</script>
+<!-- Normal <script> tag (not ES module) so this works even if opened
+     directly by double-clicking the file — no CORS/hosting issues. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <style>
+*{box-sizing:border-box;}
 body{
-  margin:0;
-  background:#111;
-  color:white;
-  font-family:Arial,sans-serif;
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#1a1a1a;
+    color:#eee;
 }
 
 .header{
-  background:#ff6600;
-  text-align:center;
-  padding:15px;
-  font-size:30px;
-  font-weight:bold;
+    background:#111;
+    padding:15px;
+    text-align:center;
+    border-bottom:3px solid #ff6600;
+}
+.header h1{margin:0;font-size:22px;}
+
+.tabs{
+    display:flex;
+    background:#111;
+}
+.tab-btn{
+    flex:1;
+    padding:14px;
+    background:#222;
+    color:#aaa;
+    border:none;
+    font-size:15px;
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+}
+.tab-btn.active{
+    background:#1a1a1a;
+    color:white;
+    border-bottom:3px solid #ff6600;
 }
 
-.orders{
-  padding:20px;
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(350px,1fr));
-  gap:20px;
+.tab-content{display:none;padding:15px;}
+.tab-content.active{display:block;}
+
+.banner{
+    display:none;
+    background:#c0392b;
+    color:white;
+    padding:12px 15px;
+    border-radius:8px;
+    margin-bottom:15px;
+    font-weight:bold;
 }
 
-.order{
-  background:#222;
-  border-radius:15px;
-  padding:20px;
+.orders-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+    gap:15px;
 }
 
-.order_number{
-  font-size:42px;
-  font-weight:bold;
-  color:#ffd700;
+.order-card{
+    background:#2a2a2a;
+    border-radius:12px;
+    padding:15px;
+    border-left:8px solid #888;
+}
+.order-card.status-new{border-left-color:#888;}
+.order-card.status-preparing{border-left-color:#f0ad4e;}
+.order-card.status-ready{border-left-color:#5bc0de;}
+.order-card.status-delivered{border-left-color:#28a745;opacity:.6;}
+
+.order-card h3{margin:0 0 5px;font-size:20px;}
+.order-card .meta{font-size:13px;color:#bbb;margin-bottom:8px;}
+.order-card ul{margin:8px 0;padding-left:18px;}
+.order-card li{font-size:15px;margin-bottom:3px;}
+
+.status-badge{
+    display:inline-block;
+    padding:4px 10px;
+    border-radius:20px;
+    font-size:12px;
+    font-weight:bold;
+    margin-bottom:8px;
+}
+.badge-new{background:#888;}
+.badge-preparing{background:#f0ad4e;color:#222;}
+.badge-ready{background:#5bc0de;color:#222;}
+.badge-delivered{background:#28a745;}
+
+/* Checklist status stepper — tap ANY stage to set it directly,
+   so a mis-tap (e.g. Delivered instead of Ready) is one tap to fix. */
+.checklist{
+    display:flex;
+    gap:6px;
+    margin-top:10px;
+}
+.check-step{
+    flex:1;
+    padding:10px 4px;
+    text-align:center;
+    border-radius:8px;
+    border:2px solid #444;
+    background:#1a1a1a;
+    color:#888;
+    font-size:12px;
+    font-weight:bold;
+    cursor:pointer;
+    line-height:1.3;
+}
+.check-step .tick{display:block;font-size:15px;margin-bottom:2px;}
+.check-step.done{background:#28a745;border-color:#28a745;color:white;}
+.check-step.current{background:#ff6600;border-color:#ff6600;color:white;transform:scale(1.05);}
+.check-step:active{opacity:.7;}
+
+.empty-msg{color:#888;text-align:center;padding:40px 0;font-size:16px;}
+
+.toggle-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:15px;
+    color:#ccc;
+    font-size:14px;
 }
 
-.item{padding:6px 0;}
-.total{margin-top:10px;font-size:24px;font-weight:bold;}
-
-.status{
-  margin-top:10px;
-  padding:10px;
-  text-align:center;
-  border-radius:8px;
-  font-weight:bold;
+/* Inventory tab */
+.inv-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    gap:12px;
 }
-
-.new{background:#dc3545;}
-.preparing{background:#ff9800;}
-.ready{background:#28a745;}
-
-.empty{
-  text-align:center;
-  font-size:30px;
-  margin-top:80px;
+.inv-card{
+    background:#2a2a2a;
+    border-radius:10px;
+    padding:15px;
+}
+.inv-card.low{border:2px solid #dc3545;}
+.inv-card h4{margin:0 0 8px;}
+.low-tag{color:#ff6b6b;font-weight:bold;font-size:12px;margin-left:6px;}
+.inv-card input{
+    width:100%;
+    padding:10px;
+    margin-top:8px;
+    border-radius:6px;
+    border:1px solid #555;
+    background:#1a1a1a;
+    color:white;
+    font-size:15px;
+}
+.inv-card p{font-size:13px;color:#aaa;margin:6px 0;}
+.inv-card button{
+    width:100%;
+    padding:10px;
+    margin-top:8px;
+    border:none;
+    border-radius:6px;
+    background:#1565c0;
+    color:white;
+    cursor:pointer;
+    font-size:14px;
 }
 </style>
 </head>
-
 <body>
-<div class="header">🍗 BERDYS KITCHEN DISPLAY</div>
-<div id="orders" class="orders"></div>
+
+<div class="header">
+    <h1>👨‍🍳 Berdys Kitchen Display</h1>
+</div>
+
+<div class="tabs">
+    <button class="tab-btn active" id="tabOrdersBtn" onclick="switchTab('orders')">🔥 Orders</button>
+    <button class="tab-btn" id="tabInventoryBtn" onclick="switchTab('inventory')">📦 Inventory Checkup</button>
+</div>
+
+<!-- ORDERS TAB -->
+<div class="tab-content active" id="ordersTab">
+
+    <div class="banner" id="lowStockBanner"></div>
+
+    <label class="toggle-row">
+        <input type="checkbox" id="showDelivered" onchange="loadOrders()">
+        Show already-delivered orders
+    </label>
+
+    <div class="orders-grid" id="orders">
+        <p class="empty-msg">Loading orders...</p>
+    </div>
+
+</div>
+
+<!-- INVENTORY TAB -->
+<div class="tab-content" id="inventoryTab">
+
+    <div class="banner" id="lowStockBanner2"></div>
+
+    <div class="inv-grid" id="inventory"></div>
+
+</div>
+
+<script>
+const supabase_client = supabase.createClient(
+    "https://lppfbiskcuiopzrjensa.supabase.co",
+    "sb_publishable_iRQW5dIMA5dcXKsoRnF6Qg_oRVQLNyp"
+);
+
+const LOW_STOCK_THRESHOLD = 10;
+
+const STATUS_STEPS = ["New", "Preparing", "Ready", "Delivered"];
+
+function switchTab(tab){
+    document.getElementById("tabOrdersBtn").classList.toggle("active", tab === "orders");
+    document.getElementById("tabInventoryBtn").classList.toggle("active", tab === "inventory");
+    document.getElementById("ordersTab").classList.toggle("active", tab === "orders");
+    document.getElementById("inventoryTab").classList.toggle("active", tab === "inventory");
+}
+
+async function loadOrders(){
+    const showDelivered = document.getElementById("showDelivered").checked;
+
+    const { data, error } = await supabase_client
+        .from("orders")
+        .select("*")
+        .order("order_number", { ascending: true });
+
+    if (error) { console.error(error); return; }
+
+    const filtered = showDelivered ? data : data.filter(o => o.status !== "Delivered");
+
+    if (filtered.length === 0) {
+        document.getElementById("orders").innerHTML = '<p class="empty-msg">No active orders right now 🎉</p>';
+        return;
+    }
+
+    let html = "";
+
+    filtered.forEach(order => {
+        const status = order.status || "New";
+
+        let itemsHTML = "";
+        if (Array.isArray(order.items)) {
+            order.items.forEach(item => {
+                itemsHTML += `<li>${item.name} x${item.qty}</li>`;
+            });
+        }
+
+        const statusClass = "status-" + status.toLowerCase();
+        const badgeClass = "badge-" + status.toLowerCase();
+        const currentIndex = STATUS_STEPS.indexOf(status);
+
+        // Checklist: every stage is tappable directly, so if the chef
+        // taps the wrong stage (e.g. Delivered instead of Ready), fixing
+        // it is just one tap on the correct stage — no forced sequence.
+        let checklistHTML = '<div class="checklist">';
+        STATUS_STEPS.forEach((step, i) => {
+            let cls = "check-step";
+            let tick = i + 1;
+            if (i < currentIndex) { cls += " done"; tick = "✔"; }
+            else if (i === currentIndex) { cls += " current"; tick = "●"; }
+
+            checklistHTML += `<div class="${cls}" onclick="advanceStatus(${order.id}, '${step}')"><span class="tick">${tick}</span>${step}</div>`;
+        });
+        checklistHTML += "</div>";
+
+        html += `
+        <div class="order-card ${statusClass}">
+            <span class="status-badge ${badgeClass}">${status}</span>
+            <h3>Order #${order.order_number}</h3>
+            <div class="meta">
+                Table ${order.table_number || "-"} • ${order.customer_name || "N/A"}
+            </div>
+            <ul>${itemsHTML}</ul>
+            ${checklistHTML}
+        </div>`;
+    });
+
+    document.getElementById("orders").innerHTML = html;
+}
+
+async function advanceStatus(id, newStatus){
+    const { error } = await supabase_client
+        .from("orders")
+        .update({ status: newStatus })
+        .eq("id", id);
+
+    if (error) { console.error(error); alert(error.message); return; }
+
+    loadOrders();
+}
+
+async function loadInventory(){
+    const { data, error } = await supabase_client
+        .from("inventory")
+        .select("*")
+        .order("item_name");
+
+    if (error) { console.error(error); return; }
+
+    let html = "";
+    let lowItems = [];
+
+    data.forEach(item => {
+        const low = Number(item.stock) <= LOW_STOCK_THRESHOLD;
+        if (low) lowItems.push(item.item_name);
+
+        html += `
+        <div class="inv-card ${low ? 'low' : ''}">
+            <h4>${item.item_name} ${low ? '<span class="low-tag">LOW</span>' : ''}</h4>
+            <p>Unit: ${item.unit}</p>
+            <input type="number" id="stock_${item.id}" value="${item.stock}">
+            <button onclick="saveStock(${item.id})">Update Stock</button>
+        </div>`;
+    });
+
+    document.getElementById("inventory").innerHTML = html;
+
+    updateLowStockBanners(lowItems);
+}
+
+async function saveStock(id){
+    const stock = document.getElementById("stock_" + id).value;
+
+    const { error } = await supabase_client
+        .from("inventory")
+        .update({ stock: Number(stock) })
+        .eq("id", id);
+
+    if (error) { console.error(error); alert(error.message); return; }
+
+    loadInventory();
+}
+
+function updateLowStockBanners(lowItems){
+    const text = lowItems.length > 0
+        ? "⚠️ Low Stock: " + lowItems.join(", ")
+        : "";
+
+    [document.getElementById("lowStockBanner"), document.getElementById("lowStockBanner2")].forEach(banner => {
+        if (lowItems.length === 0) {
+            banner.style.display = "none";
+        } else {
+            banner.style.display = "block";
+            banner.textContent = text;
+        }
+    });
+}
+
+// Initial load + auto refresh
+loadOrders();
+loadInventory();
+
+setInterval(loadOrders, 4000);
+setInterval(loadInventory, 8000);
+</script>
+
 </body>
 </html>
-
