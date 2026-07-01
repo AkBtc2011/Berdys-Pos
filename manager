@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Berdys Manager V2</title>
+
+<!--
+  IMPORTANT: This version loads Supabase using a normal <script> tag
+  (the UMD build) instead of an ES module "import". Regular <script>
+  tags are NOT blocked by CORS when you open this file directly by
+  double-clicking it (file:// path). That is why this version works
+  straight away, while a version using `type="module"` + `import`
+  will NOT work unless served over http(s) (e.g. via Netlify or a
+  local server). You don't need to do anything extra here — just
+  double-click and use it.
+-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<style>
+*{box-sizing:border-box;}
+body{margin:0;font-family:Arial,sans-serif;background:#f5f5f5;}
+
+.header{background:#1565c0;color:white;text-align:center;padding:15px;}
+
+.login{max-width:400px;margin:40px auto;background:white;padding:20px;border-radius:10px;}
+.login input{width:100%;padding:12px;margin-top:10px;}
+.login button{width:100%;padding:12px;margin-top:10px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;}
+
+.dashboard{display:none;padding:15px;}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;}
+.card{background:white;padding:15px;border-radius:10px;}
+
+.section{background:white;padding:15px;border-radius:10px;margin-top:15px;}
+
+.menu{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px;}
+.item{border:1px solid #ddd;border-radius:10px;padding:10px;text-align:center;}
+.item button{width:100%;padding:10px;background:green;color:white;border:none;border-radius:6px;margin-top:8px;cursor:pointer;}
+
+.cart-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ddd;}
+
+.place-btn{width:100%;padding:14px;background:#ff6600;color:white;border:none;margin-top:10px;font-size:18px;border-radius:6px;cursor:pointer;}
+
+input,select{width:100%;padding:10px;margin-top:10px;border:1px solid #ccc;border-radius:6px;}
+
+.print-btn{background:#28a745;color:white;border:none;padding:10px;margin-top:10px;border-radius:6px;cursor:pointer;}
+
+#billPreview{background:white;padding:15px;margin-top:15px;border:2px dashed #444;}
+
+table{border-collapse:collapse;width:100%;margin-top:10px;}
+table th, table td{border:1px solid #ccc;padding:8px;text-align:left;}
+
+.status-msg{font-size:13px;color:#666;margin-top:5px;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>👨‍💼 Berdys Manager Dashboard</h1>
+</div>
+
+<!-- LOGIN -->
+<div class="login" id="loginBox">
+  <h2>Manager Login</h2>
+  <input id="username" placeholder="Username">
+  <input type="password" id="password" placeholder="Password">
+  <button id="loginBtn">Login</button>
+  <p class="status-msg" id="loginMsg"></p>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dashboard" id="dashboard">
+
+  <div class="stats">
+    <div class="card"><h3>Today's Sales</h3><h1>₹<span id="todaySales">0</span></h1></div>
+    <div class="card"><h3>Best Seller</h3><h1 id="bestSeller">-</h1></div>
+    <div class="card"><h3>Low Stock Items</h3><h1 id="lowStockCount">0</h1></div>
+    <div class="card"><h3>Total Orders</h3><h1 id="totalOrders">0</h1></div>
+    <div class="card"><h3>Total Sales</h3><h1>₹<span id="totalSales">0</span></h1></div>
+    <div class="card"><h3>Paid Orders</h3><h1 id="paidOrders">0</h1></div>
+    <div class="card"><h3>Unpaid Orders</h3><h1 id="unpaidOrders">0</h1></div>
+  </div>
+
+  <!-- CREATE ORDER -->
+  <div class="section">
+    <h2>Create Order</h2>
+
+    <input id="customerName" placeholder="Customer Name">
+
+    <select id="tableNumber">
+      <option value="">Select Table</option>
+      <option value="1">Table 1</option>
+      <option value="2">Table 2</option>
+      <option value="3">Table 3</option>
+      <option value="4">Table 4</option>
+      <option value="5">Table 5</option>
+    </select>
+
+    <select id="paymentStatus">
+      <option value="Unpaid">Unpaid</option>
+      <option value="Paid">Paid</option>
+    </select>
+
+    <h3 id="orderno">Order #Loading...</h3>
+
+    <div class="menu">
+      <div class="item"><h4>Chicken Burger</h4><p>₹120</p><button onclick="addItem('Chicken Burger',120)">Add</button></div>
+      <div class="item"><h4>Chicken Wrap</h4><p>₹150</p><button onclick="addItem('Chicken Wrap',150)">Add</button></div>
+      <div class="item"><h4>Wings 6pc</h4><p>₹180</p><button onclick="addItem('Wings 6pc',180)">Add</button></div>
+      <div class="item"><h4>Fries</h4><p>₹80</p><button onclick="addItem('Fries',80)">Add</button></div>
+      <div class="item"><h4>Cold Drink</h4><p>₹50</p><button onclick="addItem('Cold Drink',50)">Add</button></div>
+      <div class="item"><h4>Chicken Popcorn</h4><p>₹140</p><button onclick="addItem('Chicken Popcorn',140)">Add</button></div>
+      <div class="item"><h4>Zinger Burger</h4><p>₹180</p><button onclick="addItem('Zinger Burger',180)">Add</button></div>
+      <div class="item"><h4>Family Bucket</h4><p>₹499</p><button onclick="addItem('Family Bucket',499)">Add</button></div>
+    </div>
+
+    <h3>Cart</h3>
+    <div id="cartItems"></div>
+
+    <p>Subtotal : ₹<span id="subtotal">0</span></p>
+    <p>GST 5% : ₹<span id="gst">0</span></p>
+    <h2>Grand Total : ₹<span id="grandTotal">0</span></h2>
+
+    <button class="place-btn" onclick="placeOrder()">Place Order &amp; Generate Bill</button>
+  </div>
+
+  <!-- AUTO / MANUAL BILL -->
+  <div class="section">
+    <h2>🧾 GST Bill</h2>
+    <p class="status-msg">A bill is generated automatically every time you place an order. You can also pull up any past order's bill here:</p>
+    <input id="billOrderNo" placeholder="Enter Order Number to reprint">
+    <button onclick="generateBill()" style="margin-top:10px;padding:10px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;width:100%;">Generate / Reprint Bill</button>
+    <div id="billPreview"></div>
+  </div>
+
+  <!-- LIVE ORDERS -->
+  <div class="section">
+    <h2>Live Orders</h2>
+    <input id="searchOrder" placeholder="Search Customer Name" onkeyup="loadOrders()">
+    <div id="orders"></div>
+  </div>
+
+  <!-- INVENTORY -->
+  <div class="section">
+    <h2>Inventory Management</h2>
+    <div id="inventory"></div>
+  </div>
+
+  <!-- REPORTS -->
+  <div class="section">
+    <h2>📊 Reports</h2>
+    <div id="reportBox">
+      <p>Today's Sales: ₹<span id="reportTodaySales">0</span></p>
+      <p>Best Seller: <span id="reportBestSeller">-</span></p>
+      <p>Low Stock: <span id="reportLowStock">0</span></p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Normal script (NOT type="module") — works on file:// and http(s)://
+
+const USERNAME = "DEEPU";
+const PASSWORD = "1234";
+
+const SUPABASE_URL = "https://lppfbiskcuiopzrjensa.supabase.co";
+const SUPABASE_KEY = "sb_publishable_iRQW5dIMA5dcXKsoRnF6Qg_oRVQLNyp";
+
+// The UMD build exposes a global `supabase` object with createClient on it.
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let cart = [];
+let currentOrderNo = 101;
+let intervalsStarted = false;
+
+// This script tag is at the bottom of the page, so the DOM is already
+// fully loaded by the time this code runs — no need to wait for
+// DOMContentLoaded (waiting for it here would never fire, since that
+// event already happened before this script executed).
+document.getElementById("loginBtn").addEventListener("click", handleLogin);
+document.getElementById("password").addEventListener("keyup", (e) => {
+  if (e.key === "Enter") handleLogin();
+});
+
+async function handleLogin(){
+  const user = document.getElementById("username").value.trim();
+  const pass = document.getElementById("password").value.trim();
+  const msg = document.getElementById("loginMsg");
+
+  if (user !== USERNAME || pass !== PASSWORD) {
+    msg.style.color = "red";
+    msg.innerText = "Invalid username or password.";
+    return;
+  }
+
+  msg.innerText = "";
+  document.getElementById("loginBox").style.display = "none";
+  document.getElementById("dashboard").style.display = "block";
+
+  startApp();
+}
+
+function startApp(){
+  loadStats();
+  loadOrderNumber();
+  loadOrders();
+  loadInventory();
+  loadReports();
+
+  if (!intervalsStarted) {
+    intervalsStarted = true;
+    setInterval(loadStats, 5000);
+    setInterval(loadOrders, 5000);
+    setInterval(loadInventory, 10000);
+    setInterval(loadReports, 10000);
+  }
+}
+
+async function loadStats(){
+  const { data, error } = await sb.from("orders").select("*");
+  if (error) { console.error(error); return; }
+
+  document.getElementById("totalOrders").innerText = data.length;
+
+  let sales = 0, paid = 0, unpaid = 0;
+  data.forEach(order => {
+    sales += Number(order.total || 0);
+    if (order.payment_status === "Paid") paid++; else unpaid++;
+  });
+
+  document.getElementById("totalSales").innerText = sales.toFixed(2);
+  document.getElementById("paidOrders").innerText = paid;
+  document.getElementById("unpaidOrders").innerText = unpaid;
+}
+
+async function loadOrderNumber(){
+  const { data, error } = await sb
+    .from("orders")
+    .select("order_number")
+    .order("order_number", { ascending: false })
+    .limit(1);
+
+  if (!error && data && data.length > 0) {
+    currentOrderNo = Number(data[0].order_number) + 1;
+  }
+
+  document.getElementById("orderno").innerText = "Order #" + currentOrderNo;
+}
+
+function addItem(name, price){
+  const existing = cart.find(item => item.name === name);
+  if (existing) existing.qty++;
+  else cart.push({ name, price, qty: 1 });
+  renderCart();
+}
+
+function renderCart(){
+  let html = "";
+  let subtotal = 0;
+
+  cart.forEach(item => {
+    const rowTotal = item.price * item.qty;
+    subtotal += rowTotal;
+    html += `<div class="cart-row"><div>${item.name} x${item.qty}</div><div>₹${rowTotal}</div></div>`;
+  });
+
+  const gst = subtotal * 0.05;
+  const grandTotal = subtotal + gst;
+
+  document.getElementById("cartItems").innerHTML = html;
+  document.getElementById("subtotal").innerText = subtotal.toFixed(2);
+  document.getElementById("gst").innerText = gst.toFixed(2);
+  document.getElementById("grandTotal").innerText = grandTotal.toFixed(2);
+}
+
+async function placeOrder(){
+  const customerName = document.getElementById("customerName").value.trim();
+  const tableNumber = document.getElementById("tableNumber").value;
+  const paymentStatus = document.getElementById("paymentStatus").value;
+
+  if (!customerName) { alert("Enter Customer Name"); return; }
+  if (!tableNumber) { alert("Select Table"); return; }
+  if (cart.length === 0) { alert("Cart Empty"); return; }
+
+  let subtotal = 0;
+  cart.forEach(item => subtotal += item.price * item.qty);
+  const gst = subtotal * 0.05;
+  const total = subtotal + gst;
+  const orderDate = new Date().toLocaleString();
+  const orderNumber = currentOrderNo;
+
+  const { error } = await sb.from("orders").insert([{
+    order_number: orderNumber,
+    order_date: orderDate,
+    customer_name: customerName,
+    table_number: tableNumber,
+    items: cart,
+    total: total,
+    status: "New",
+    payment_status: paymentStatus
+  }]);
+
+  if (error) { console.error(error); alert(error.message); return; }
+
+  // AUTO BILL: render the bill immediately using the data we already have,
+  // no need to re-fetch from the database.
+  renderBill({
+    order_number: orderNumber,
+    customer_name: customerName,
+    table_number: tableNumber,
+    order_date: orderDate,
+    items: cart,
+    payment_status: paymentStatus,
+    status: "New"
+  });
+
+  alert("Order #" + orderNumber + " Created Successfully. Bill generated below.");
+
+  cart = [];
+  renderCart();
+  document.getElementById("customerName").value = "";
+  document.getElementById("tableNumber").value = "";
+
+  currentOrderNo++;
+  document.getElementById("orderno").innerText = "Order #" + currentOrderNo;
+
+  loadStats();
+  loadOrders();
+}
+
+async function loadOrders(){
+  const search = document.getElementById("searchOrder")?.value?.toLowerCase() || "";
+
+  const { data, error } = await sb
+    .from("orders")
+    .select("*")
+    .order("order_number", { ascending: false });
+
+  if (error) { console.error(error); return; }
+
+  let html = "";
+
+  data.forEach(order => {
+    if (search && !String(order.customer_name || "").toLowerCase().includes(search)) return;
+
+    let itemsHTML = "";
+    if (Array.isArray(order.items)) {
+      order.items.forEach(item => {
+        itemsHTML += `<li>${item.name} x${item.qty}</li>`;
+      });
+    }
+
+    html += `
+      <div class="card" style="margin-top:10px;">
+        <h3>Order #${order.order_number}</h3>
+        <p>Customer: <b>${order.customer_name}</b></p>
+        <p>Table: <b>${order.table_number}</b></p>
+        <p>Date: ${order.order_date}</p>
+        <ul>${itemsHTML}</ul>
+        <p>Total: ₹${order.total}</p>
+        <p>Status:
+          <select onchange="updateStatus(${order.id}, this.value)">
+            <option value="New" ${order.status==="New"?"selected":""}>New</option>
+            <option value="Preparing" ${order.status==="Preparing"?"selected":""}>Preparing</option>
+            <option value="Ready" ${order.status==="Ready"?"selected":""}>Ready</option>
+            <option value="Delivered" ${order.status==="Delivered"?"selected":""}>Delivered</option>
+          </select>
+        </p>
+        <p>Payment:
+          <select onchange="updatePayment(${order.id}, this.value)">
+            <option value="Unpaid" ${order.payment_status==="Unpaid"?"selected":""}>Unpaid</option>
+            <option value="Paid" ${order.payment_status==="Paid"?"selected":""}>Paid</option>
+          </select>
+        </p>
+        <button class="print-btn" onclick="generateBillFor(${order.order_number})">View / Print Bill</button>
+      </div>`;
+  });
+
+  document.getElementById("orders").innerHTML = html;
+}
+
+async function updateStatus(id, status){
+  await sb.from("orders").update({ status }).eq("id", id);
+  loadOrders();
+}
+
+async function updatePayment(id, payment){
+  await sb.from("orders").update({ payment_status: payment }).eq("id", id);
+  loadOrders();
+  loadStats();
+}
+
+async function loadInventory(){
+  const { data, error } = await sb.from("inventory").select("*").order("item_name");
+  if (error) { console.error(error); return; }
+
+  let html = "";
+  data.forEach(item => {
+    html += `
+      <div class="card" style="margin-top:10px;">
+        <h4>${item.item_name}</h4>
+        <input type="number" id="stock_${item.id}" value="${item.stock}">
+        <p>Unit: ${item.unit}</p>
+        <button onclick="saveStock(${item.id})" style="padding:8px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;width:100%;">Update Stock</button>
+      </div>`;
+  });
+
+  document.getElementById("inventory").innerHTML = html;
+}
+
+async function saveStock(id){
+  const stock = document.getElementById("stock_" + id).value;
+  await sb.from("inventory").update({ stock: Number(stock) }).eq("id", id);
+  alert("Inventory Updated");
+  loadInventory();
+  loadReports();
+}
+
+async function loadReports(){
+  const { data, error } = await sb.from("orders").select("*");
+  if (error) { console.error(error); return; }
+
+  let todaySales = 0;
+  let itemCount = {};
+  const today = new Date().toLocaleDateString();
+
+  data.forEach(order => {
+    if (String(order.order_date).includes(today)) {
+      todaySales += Number(order.total || 0);
+    }
+    if (Array.isArray(order.items)) {
+      order.items.forEach(item => {
+        if (!itemCount[item.name]) itemCount[item.name] = 0;
+        itemCount[item.name] += Number(item.qty || 0);
+      });
+    }
+  });
+
+  let bestSeller = "-", bestQty = 0;
+  for (const item in itemCount) {
+    if (itemCount[item] > bestQty) { bestQty = itemCount[item]; bestSeller = item; }
+  }
+
+  document.getElementById("todaySales").innerText = todaySales.toFixed(2);
+  document.getElementById("reportTodaySales").innerText = todaySales.toFixed(2);
+  document.getElementById("bestSeller").innerText = bestSeller;
+  document.getElementById("reportBestSeller").innerText = bestSeller;
+
+  const inv = await sb.from("inventory").select("*");
+  let lowStock = 0;
+  if (inv.data) {
+    inv.data.forEach(item => { if (Number(item.stock) <= 10) lowStock++; });
+  }
+
+  document.getElementById("lowStockCount").innerText = lowStock;
+  document.getElementById("reportLowStock").innerText = lowStock;
+}
+
+// Look up an order by order_number and render its bill (used by the
+// manual "Generate / Reprint Bill" box and the "View / Print Bill" buttons)
+async function generateBillFor(orderNo){
+  const { data, error } = await sb.from("orders").select("*").eq("order_number", orderNo).limit(1);
+
+  if (error || !data || data.length === 0) { alert("Order Not Found"); return; }
+
+  renderBill(data[0]);
+  document.getElementById("billPreview").scrollIntoView({ behavior: "smooth" });
+}
+
+function generateBill(){
+  const orderNo = document.getElementById("billOrderNo").value;
+  if (!orderNo) { alert("Enter Order Number"); return; }
+  generateBillFor(orderNo);
+}
+
+// Pure rendering function — used both for the auto-bill right after
+// placing an order, and for manually pulling up a past bill.
+function renderBill(order){
+  let itemsHTML = "";
+  let subtotal = 0;
+
+  if (Array.isArray(order.items)) {
+    order.items.forEach(item => {
+      const itemTotal = item.price * item.qty;
+      subtotal += itemTotal;
+      itemsHTML += `<tr><td>${item.name}</td><td>${item.qty}</td><td>₹${item.price}</td><td>₹${itemTotal}</td></tr>`;
+    });
+  }
+
+  const gst = subtotal * 0.05;
+  const grandTotal = subtotal + gst;
+
+  document.getElementById("billPreview").innerHTML = `
+    <h2>🍗 BERDYS CHICKEN</h2>
+    <p>Order: #${order.order_number}</p>
+    <p>Customer: ${order.customer_name}</p>
+    <p>Table: ${order.table_number}</p>
+    <p>Date: ${order.order_date}</p>
+    <table border="1" width="100%" cellpadding="8">
+      <tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr>
+      ${itemsHTML}
+    </table>
+    <h3>Subtotal: ₹${subtotal.toFixed(2)}</h3>
+    <h3>GST 5%: ₹${gst.toFixed(2)}</h3>
+    <h2>Grand Total: ₹${grandTotal.toFixed(2)}</h2>
+    <p>Payment: ${order.payment_status}</p>
+    <p>Status: ${order.status}</p>
+    <button class="print-btn" onclick="printBill()">Print Bill</button>
+  `;
+}
+
+function printBill(){
+  const content = document.getElementById("billPreview").innerHTML;
+  const w = window.open("", "", "width=800,height=600");
+  w.document.write(`<html><head><title>Bill</title></head><body>${content}</body></html>`);
+  w.document.close();
+  w.print();
+}
+</script>
+
+</body>
+</html>
