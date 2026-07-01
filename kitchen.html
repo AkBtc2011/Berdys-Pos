@@ -1,4 +1,4 @@
-```html
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -57,29 +57,47 @@ async function loadOrders() {
     if (order.status === "Preparing") statusClass = "preparing";
     if (order.status === "Ready") statusClass = "ready";
 
-    html += `
-      <div class="order">
-        <div class="order_number">
-          #${order.id}
-        </div>
+   html += `
+<div class="order">
 
-        <div class="date">
-          ${order.order_date}
-        </div>
+    <div class="order_number">
+    #${order.order_number}
+    </div>
 
-        <div class="items">
-          ${itemsHTML}
-        </div>
+    <div class="date">
+    ${order.order_date}
+    </div>
 
-        <div class="total">
-          ₹${order.total}
-        </div>
+    <div style="margin-top:10px;font-size:20px;">
+    👤 ${order.customer_name || "N/A"}
+    </div>
 
-        <div class="status ${statusClass}">
-          ${order.status}
-        </div>
-      </div>
-    `;
+    <div style="margin-top:5px;font-size:20px;">
+    🪑 Table ${order.table_number || "-"}
+    </div>
+
+    <div style="
+    margin-top:10px;
+    font-size:18px;
+    font-weight:bold;
+    color:${order.payment_status==="Paid"?"#00ff66":"#ff4444"};
+    ">
+    ${order.payment_status==="Paid" ? "🟢 Paid" : "🔴 Unpaid"}
+    </div>
+
+    <div class="items">
+    ${itemsHTML}
+    </div>
+
+    <div class="total">
+    ₹${order.total}
+    </div>
+
+    <div class="status ${statusClass}">
+    ${order.status}
+    </div>
+
+</div>`;
   });
 
   document.getElementById("orders").innerHTML = html;
@@ -154,4 +172,4 @@ body{
 <div id="orders" class="orders"></div>
 </body>
 </html>
-```
+
