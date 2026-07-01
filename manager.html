@@ -3,17 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Berdys Manager V2</title>
+<title>Berdys Manager V3</title>
 
 <!--
-  IMPORTANT: This version loads Supabase using a normal <script> tag
-  (the UMD build) instead of an ES module "import". Regular <script>
-  tags are NOT blocked by CORS when you open this file directly by
-  double-clicking it (file:// path). That is why this version works
-  straight away, while a version using `type="module"` + `import`
-  will NOT work unless served over http(s) (e.g. via Netlify or a
-  local server). You don't need to do anything extra here — just
-  double-click and use it.
+  Loads Supabase via a normal <script> tag (UMD build), not an ES module
+  import — this works when double-clicking the file directly (file://),
+  unlike `type="module"` + `import`, which browsers block on file://.
 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
@@ -21,13 +16,16 @@
 *{box-sizing:border-box;}
 body{margin:0;font-family:Arial,sans-serif;background:#f5f5f5;}
 
-.header{background:#1565c0;color:white;text-align:center;padding:15px;}
+.header{background:#1565c0;color:white;text-align:center;padding:15px;position:relative;}
+.logout-btn{position:absolute;right:15px;top:50%;transform:translateY(-50%);background:#c0392b;color:white;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px;}
 
 .login{max-width:400px;margin:40px auto;background:white;padding:20px;border-radius:10px;}
 .login input{width:100%;padding:12px;margin-top:10px;}
 .login button{width:100%;padding:12px;margin-top:10px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;}
 
 .dashboard{display:none;padding:15px;}
+
+.banner{display:none;background:#dc3545;color:white;padding:12px 15px;border-radius:8px;margin-bottom:15px;font-weight:bold;}
 
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px;}
 .card{background:white;padding:15px;border-radius:10px;}
@@ -52,12 +50,14 @@ table{border-collapse:collapse;width:100%;margin-top:10px;}
 table th, table td{border:1px solid #ccc;padding:8px;text-align:left;}
 
 .status-msg{font-size:13px;color:#666;margin-top:5px;}
+.low-stock-tag{color:#dc3545;font-weight:bold;font-size:12px;}
 </style>
 </head>
 <body>
 
 <div class="header">
   <h1>👨‍💼 Berdys Manager Dashboard</h1>
+  <button class="logout-btn" id="logoutBtn" style="display:none;">Logout</button>
 </div>
 
 <!-- LOGIN -->
@@ -72,6 +72,9 @@ table th, table td{border:1px solid #ccc;padding:8px;text-align:left;}
 <!-- DASHBOARD -->
 <div class="dashboard" id="dashboard">
 
+  <!-- LOW STOCK BANNER -->
+  <div class="banner" id="lowStockBanner"></div>
+
   <div class="stats">
     <div class="card"><h3>Today's Sales</h3><h1>₹<span id="todaySales">0</span></h1></div>
     <div class="card"><h3>Best Seller</h3><h1 id="bestSeller">-</h1></div>
@@ -80,6 +83,9 @@ table th, table td{border:1px solid #ccc;padding:8px;text-align:left;}
     <div class="card"><h3>Total Sales</h3><h1>₹<span id="totalSales">0</span></h1></div>
     <div class="card"><h3>Paid Orders</h3><h1 id="paidOrders">0</h1></div>
     <div class="card"><h3>Unpaid Orders</h3><h1 id="unpaidOrders">0</h1></div>
+    <div class="card"><h3>Cash Sales</h3><h1>₹<span id="cashSales">0</span></h1></div>
+    <div class="card"><h3>UPI Sales</h3><h1>₹<span id="upiSales">0</span></h1></div>
+    <div class="card"><h3>Card Sales</h3><h1>₹<span id="cardSales">0</span></h1></div>
   </div>
 
   <!-- CREATE ORDER -->
@@ -100,6 +106,12 @@ table th, table td{border:1px solid #ccc;padding:8px;text-align:left;}
     <select id="paymentStatus">
       <option value="Unpaid">Unpaid</option>
       <option value="Paid">Paid</option>
+    </select>
+
+    <select id="paymentMethod">
+      <option value="Cash">Cash</option>
+      <option value="UPI">UPI</option>
+      <option value="Card">Card</option>
     </select>
 
     <h3 id="orderno">Order #Loading...</h3>
@@ -162,27 +174,25 @@ table th, table td{border:1px solid #ccc;padding:8px;text-align:left;}
 <script>
 // Normal script (NOT type="module") — works on file:// and http(s)://
 
-const USERNAME = "DEEPU";
-const PASSWORD = "1234";
+const USERNAME = "Manager";
+const PASSWORD = "@Berdys";
 
 const SUPABASE_URL = "https://lppfbiskcuiopzrjensa.supabase.co";
 const SUPABASE_KEY = "sb_publishable_iRQW5dIMA5dcXKsoRnF6Qg_oRVQLNyp";
+const LOW_STOCK_THRESHOLD = 10;
 
-// The UMD build exposes a global `supabase` object with createClient on it.
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let cart = [];
 let currentOrderNo = 101;
 let intervalsStarted = false;
+let intervalIds = [];
 
-// This script tag is at the bottom of the page, so the DOM is already
-// fully loaded by the time this code runs — no need to wait for
-// DOMContentLoaded (waiting for it here would never fire, since that
-// event already happened before this script executed).
 document.getElementById("loginBtn").addEventListener("click", handleLogin);
 document.getElementById("password").addEventListener("keyup", (e) => {
   if (e.key === "Enter") handleLogin();
 });
+document.getElementById("logoutBtn").addEventListener("click", handleLogout);
 
 async function handleLogin(){
   const user = document.getElementById("username").value.trim();
@@ -198,8 +208,26 @@ async function handleLogin(){
   msg.innerText = "";
   document.getElementById("loginBox").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
+  document.getElementById("logoutBtn").style.display = "inline-block";
 
   startApp();
+}
+
+function handleLogout(){
+  // Stop background refresh timers so they don't keep hitting the
+  // database while logged out.
+  intervalIds.forEach(id => clearInterval(id));
+  intervalIds = [];
+  intervalsStarted = false;
+
+  cart = [];
+
+  document.getElementById("dashboard").style.display = "none";
+  document.getElementById("logoutBtn").style.display = "none";
+  document.getElementById("loginBox").style.display = "block";
+  document.getElementById("username").value = "";
+  document.getElementById("password").value = "";
+  document.getElementById("loginMsg").innerText = "";
 }
 
 function startApp(){
@@ -211,10 +239,10 @@ function startApp(){
 
   if (!intervalsStarted) {
     intervalsStarted = true;
-    setInterval(loadStats, 5000);
-    setInterval(loadOrders, 5000);
-    setInterval(loadInventory, 10000);
-    setInterval(loadReports, 10000);
+    intervalIds.push(setInterval(loadStats, 5000));
+    intervalIds.push(setInterval(loadOrders, 5000));
+    intervalIds.push(setInterval(loadInventory, 10000));
+    intervalIds.push(setInterval(loadReports, 10000));
   }
 }
 
@@ -225,14 +253,25 @@ async function loadStats(){
   document.getElementById("totalOrders").innerText = data.length;
 
   let sales = 0, paid = 0, unpaid = 0;
+  let cash = 0, upi = 0, card = 0;
+
   data.forEach(order => {
-    sales += Number(order.total || 0);
+    const total = Number(order.total || 0);
+    sales += total;
     if (order.payment_status === "Paid") paid++; else unpaid++;
+
+    const method = order.payment_method || "Cash";
+    if (method === "Cash") cash += total;
+    else if (method === "UPI") upi += total;
+    else if (method === "Card") card += total;
   });
 
   document.getElementById("totalSales").innerText = sales.toFixed(2);
   document.getElementById("paidOrders").innerText = paid;
   document.getElementById("unpaidOrders").innerText = unpaid;
+  document.getElementById("cashSales").innerText = cash.toFixed(2);
+  document.getElementById("upiSales").innerText = upi.toFixed(2);
+  document.getElementById("cardSales").innerText = card.toFixed(2);
 }
 
 async function loadOrderNumber(){
@@ -275,14 +314,102 @@ function renderCart(){
   document.getElementById("grandTotal").innerText = grandTotal.toFixed(2);
 }
 
+// Looks up "recipes" for the items in this cart and returns a map of
+// { inventory_item_name: total_qty_needed }. Menu items with no recipe
+// rows are simply left out of the map (nothing to check/deduct for them).
+async function getDeductionsForCart(cartItems){
+  const menuItemNames = cartItems.map(item => item.name);
+
+  const { data: recipeRows, error } = await sb
+    .from("recipes")
+    .select("*")
+    .in("menu_item", menuItemNames);
+
+  if (error) {
+    console.error("Could not load recipes:", error);
+    return {}; // fail open — don't block orders just because recipes failed to load
+  }
+
+  const deductions = {};
+  if (!recipeRows) return deductions;
+
+  cartItems.forEach(cartItem => {
+    recipeRows
+      .filter(r => r.menu_item === cartItem.name)
+      .forEach(r => {
+        const needed = Number(r.qty_per_unit) * cartItem.qty;
+        deductions[r.inventory_item] = (deductions[r.inventory_item] || 0) + needed;
+      });
+  });
+
+  return deductions;
+}
+
+// Checks current inventory stock against what's needed. Returns
+// { ok, shortages, invRows } — ok is false if any item doesn't have enough.
+async function checkStock(deductions){
+  const names = Object.keys(deductions);
+  if (names.length === 0) return { ok: true, shortages: [], invRows: [] };
+
+  const { data: invRows, error } = await sb
+    .from("inventory")
+    .select("*")
+    .in("item_name", names);
+
+  if (error) {
+    console.error("Could not check inventory:", error);
+    return { ok: true, shortages: [], invRows: [] }; // fail open
+  }
+
+  const shortages = [];
+  invRows.forEach(inv => {
+    const needed = deductions[inv.item_name] || 0;
+    if (Number(inv.stock) < needed) {
+      shortages.push({ item: inv.item_name, needed, available: Number(inv.stock) });
+    }
+  });
+
+  return { ok: shortages.length === 0, shortages, invRows };
+}
+
+// Actually subtracts stock, using the inventory rows already fetched
+// during checkStock (avoids a second redundant fetch).
+async function applyDeductions(deductions, invRows){
+  for (const inv of invRows) {
+    const used = deductions[inv.item_name] || 0;
+    if (used === 0) continue;
+    const newStock = Number(inv.stock) - used;
+
+    await sb.from("inventory").update({ stock: newStock }).eq("id", inv.id);
+  }
+
+  loadInventory();
+  loadReports();
+}
+
 async function placeOrder(){
   const customerName = document.getElementById("customerName").value.trim();
   const tableNumber = document.getElementById("tableNumber").value;
   const paymentStatus = document.getElementById("paymentStatus").value;
+  const paymentMethod = document.getElementById("paymentMethod").value;
 
   if (!customerName) { alert("Enter Customer Name"); return; }
   if (!tableNumber) { alert("Select Table"); return; }
   if (cart.length === 0) { alert("Cart Empty"); return; }
+
+  // STOCK CHECK: figure out what this order needs, and block placement
+  // if there isn't enough stock for any ingredient.
+  const deductions = await getDeductionsForCart(cart);
+  const stockCheck = await checkStock(deductions);
+
+  if (!stockCheck.ok) {
+    let msg = "Cannot place order — not enough stock:\n\n";
+    stockCheck.shortages.forEach(s => {
+      msg += `${s.item}: need ${s.needed}, only ${s.available} left\n`;
+    });
+    alert(msg);
+    return;
+  }
 
   let subtotal = 0;
   cart.forEach(item => subtotal += item.price * item.qty);
@@ -299,13 +426,16 @@ async function placeOrder(){
     items: cart,
     total: total,
     status: "New",
-    payment_status: paymentStatus
+    payment_status: paymentStatus,
+    payment_method: paymentMethod
   }]);
 
   if (error) { console.error(error); alert(error.message); return; }
 
-  // AUTO BILL: render the bill immediately using the data we already have,
-  // no need to re-fetch from the database.
+  // AUTO INVENTORY DEDUCTION — now that the order is confirmed saved.
+  await applyDeductions(deductions, stockCheck.invRows);
+
+  // AUTO BILL
   renderBill({
     order_number: orderNumber,
     customer_name: customerName,
@@ -313,6 +443,7 @@ async function placeOrder(){
     order_date: orderDate,
     items: cart,
     payment_status: paymentStatus,
+    payment_method: paymentMethod,
     status: "New"
   });
 
@@ -360,6 +491,7 @@ async function loadOrders(){
         <p>Date: ${order.order_date}</p>
         <ul>${itemsHTML}</ul>
         <p>Total: ₹${order.total}</p>
+        <p>Method: <b>${order.payment_method || "Cash"}</b></p>
         <p>Status:
           <select onchange="updateStatus(${order.id}, this.value)">
             <option value="New" ${order.status==="New"?"selected":""}>New</option>
@@ -398,9 +530,10 @@ async function loadInventory(){
 
   let html = "";
   data.forEach(item => {
+    const low = Number(item.stock) <= LOW_STOCK_THRESHOLD;
     html += `
       <div class="card" style="margin-top:10px;">
-        <h4>${item.item_name}</h4>
+        <h4>${item.item_name} ${low ? '<span class="low-stock-tag">LOW STOCK</span>' : ''}</h4>
         <input type="number" id="stock_${item.id}" value="${item.stock}">
         <p>Unit: ${item.unit}</p>
         <button onclick="saveStock(${item.id})" style="padding:8px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;width:100%;">Update Stock</button>
@@ -449,17 +582,31 @@ async function loadReports(){
   document.getElementById("reportBestSeller").innerText = bestSeller;
 
   const inv = await sb.from("inventory").select("*");
-  let lowStock = 0;
+  let lowStockItems = [];
   if (inv.data) {
-    inv.data.forEach(item => { if (Number(item.stock) <= 10) lowStock++; });
+    inv.data.forEach(item => {
+      if (Number(item.stock) <= LOW_STOCK_THRESHOLD) lowStockItems.push(item.item_name);
+    });
   }
 
-  document.getElementById("lowStockCount").innerText = lowStock;
-  document.getElementById("reportLowStock").innerText = lowStock;
+  document.getElementById("lowStockCount").innerText = lowStockItems.length;
+  document.getElementById("reportLowStock").innerText = lowStockItems.length;
+
+  updateLowStockBanner(lowStockItems);
 }
 
-// Look up an order by order_number and render its bill (used by the
-// manual "Generate / Reprint Bill" box and the "View / Print Bill" buttons)
+function updateLowStockBanner(lowStockItems){
+  const banner = document.getElementById("lowStockBanner");
+
+  if (lowStockItems.length === 0) {
+    banner.style.display = "none";
+    return;
+  }
+
+  banner.style.display = "block";
+  banner.innerText = "⚠️ Low Stock Alert: " + lowStockItems.join(", ");
+}
+
 async function generateBillFor(orderNo){
   const { data, error } = await sb.from("orders").select("*").eq("order_number", orderNo).limit(1);
 
@@ -475,8 +622,6 @@ function generateBill(){
   generateBillFor(orderNo);
 }
 
-// Pure rendering function — used both for the auto-bill right after
-// placing an order, and for manually pulling up a past bill.
 function renderBill(order){
   let itemsHTML = "";
   let subtotal = 0;
@@ -505,8 +650,9 @@ function renderBill(order){
     <h3>Subtotal: ₹${subtotal.toFixed(2)}</h3>
     <h3>GST 5%: ₹${gst.toFixed(2)}</h3>
     <h2>Grand Total: ₹${grandTotal.toFixed(2)}</h2>
-    <p>Payment: ${order.payment_status}</p>
-    <p>Status: ${order.status}</p>
+    <p>Payment Status: ${order.payment_status}</p>
+    <p>Payment Method: ${order.payment_method || "Cash"}</p>
+    <p>Order Status: ${order.status}</p>
     <button class="print-btn" onclick="printBill()">Print Bill</button>
   `;
 }
